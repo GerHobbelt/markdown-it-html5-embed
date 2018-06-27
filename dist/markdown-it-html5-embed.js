@@ -204,7 +204,7 @@ function translate(messageObj) {
   return rv;
 }
 
-module.exports = function html5_embed_plugin(md, options) {
+module.exports = function html5_embed_plugin(md, options = {}) {
   var gstate;
   var defaults = {
     attributes: {
