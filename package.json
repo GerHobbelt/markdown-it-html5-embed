@@ -1,6 +1,6 @@
 {
   "name": "@gerhobbelt/markdown-it-html5-embed",
-  "version": "1.0.0-2",
+  "version": "1.0.0-3",
   "description": "This is a plugin for markdown-it which adds support for embedding audio/video in the HTML5 way, by using <video>/<audio> tags.",
   "type": "module",
   "main": "lib/index.js",
