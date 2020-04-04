@@ -10,8 +10,8 @@ MP3 is allowed
 [](https://example.com/file.mp3)
 .
 <p><audio controls preload="metadata">
-<source type="audio/mpeg" src=https://example.com/file.mp3></source>
-untitled audio
+<source type="audio/mpeg" src="https://example.com/file.mp3"></source>
+Your browser does not support playing HTML5 audio. You can <a href="https://example.com/file.mp3" download>download a copy of the audio file</a> instead.
 </audio></p>
 .
 
@@ -20,8 +20,9 @@ OGV is allowed
 [test link](https://example.com/file.ogv)
 .
 <p><video controls preload="metadata">
-<source type="video/ogg" src=https://example.com/file.ogv></source>
-test link
+<source type="video/ogg" src="https://example.com/file.ogv"></source>
+Your browser does not support playing HTML5 video. You can <a href="https://example.com/file.ogv" download>download a copy of the video file</a> instead.
+Here is a description of the content: test link
 </video></p>
 .
 
@@ -31,4 +32,3 @@ Non-media link
 .
 <p><a href="https://example.com/file.php">test link</a></p>
 .
-

@@ -1,15 +1,38 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.markdownitHTML5Embed = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-/*! markdown-it-html5-embed https://github.com/cmrd-senya/markdown-it-html5-embed @license MIT */
-// This is a plugin for markdown-it which adds support for embedding audio/video in the HTML5 way with ![](url) syntax.
-// The code is originally taken from http://talk.commonmark.org/t/embedded-audio-and-video/441/16
+/*! markdown-it-html5-embed https://github.com/cmrd-senya/markdown-it-html5-embed @license MPLv2 */
+// This is a plugin for markdown-it which adds support for embedding audio/video in the HTML5 way.
 
 'use strict';
 
 var Mimoza = require('mimoza');
 
-function clear_tokens(tokens, idx) {
-  for(var i = idx; i < tokens.length; i++) {
-    switch(tokens[i].type) {
+// Default UI messages. You can customize and add simple translations via
+// options.messages. The language has to be provided via the markdown-it
+// environment, e.g.:
+//
+// md.render('some text', { language: 'some code' })
+//
+// It will default to English if not provided. To use your own i18n framework,
+// you have to provide a translation function via options.translateFn.
+//
+// The "untitled video" / "untitled audio" messages are only relevant to usage
+// inside alternative render functions, where you can access the title between [] as
+// {{title}}, and this text is used if no title is provided.
+var messages = {
+  en: {
+    'video not supported': 'Your browser does not support playing HTML5 video. ' +
+      'You can <a href="%s" download>download a copy of the video file</a> instead.',
+    'audio not supported': 'Your browser does not support playing HTML5 audio. ' +
+      'You can <a href="%s" download>download a copy of the audio file</a> instead.',
+    'content description': 'Here is a description of the content: %s',
+    'untitled video': 'Untitled video',
+    'untitled audio': 'Untitled audio'
+  }
+};
+
+function clearTokens(tokens, idx) {
+  for (var i = idx; i < tokens.length; i++) {
+    switch (tokens[i].type) {
       case 'link_close':
         tokens[i].hidden = true;
         break;
@@ -22,105 +45,247 @@ function clear_tokens(tokens, idx) {
   }
 }
 
-function html5_embed_renderer(tokens, idx, options, env, renderer, defaultRender) {
+function parseToken(tokens, idx, env) {
+  var parsed = {};
   var token = tokens[idx];
-  var isLink;
-  var title;
-  var aIndex = token.attrIndex('src');
-  if(aIndex < 0) {
-    aIndex = token.attrIndex('href');
-    isLink = true;
-    title = tokens[idx+1].content;
-  } else {
-    title = token.attrs[token.attrIndex('alt')][1];
-  }
-//  console.log('aindex of idx' + idx);
-//  console.log(aIndex);
-  if(typeof Mimoza === "undefined") {
-    Mimoza = require('mimoza');
-  }
-  var mimetype = Mimoza.getMimeType(token.attrs[aIndex][1]);
-  var RE = /^(audio|video)\/.*/gi;
-  var mimetype_matches = RE.exec(mimetype);
+  var description = '';
 
-  if(mimetype_matches !== null &&
-      (!options.html5embed.isAllowedMimeType || options.html5embed.isAllowedMimeType(mimetype_matches))) {
-    var media_type = mimetype_matches[1];
-    if(isLink) {
-      clear_tokens(tokens, idx+1);
-    }
-    if(!title) {
-      title = "untitled " + media_type;
-    }
-    if(typeof options.html5embed.attributes === "undefined"){
-      options.html5embed.attributes = {};
-    }
-    if(typeof options.html5embed.attributes[media_type] === "undefined") {
-      options.html5embed.attributes[media_type] = 'controls preload="metadata"';
-    }
-    if(options.html5embed.templateName) {
-      if(typeof HandlebarsTemplates === "undefined") {
-        console.log("handlebars_assets is not on the assets pipeline; fall back to the usual mode");
-      } else {
-        return HandlebarsTemplates[options.html5embed.templateName]({
-          media_type: media_type,
-          attributes: options.html5embed.attributes[media_type],
-          mimetype: mimetype,
-          source_url: token.attrs[aIndex][1],
-          title: title,
-          needs_cover: media_type==="video"
-        });
-      }
-    }
-    return ['<' + media_type +' ' + options.html5embed.attributes[media_type] + '>',
-      '<source type="' + mimetype + '" src=' + token.attrs[aIndex][1] + '></source>',
-      title,
-      '</' + media_type + '>'
-    ].join('\n');
-  }else {
-    return defaultRender(tokens, idx, options, env, renderer);
+  var aIndex = token.attrIndex('src');
+  parsed.isLink = aIndex < 0;
+  if (parsed.isLink) {
+    aIndex = token.attrIndex('href');
+    description = tokens[idx + 1].content;
+  } else {
+    description = token.content;
   }
+
+  parsed.url = token.attrs[aIndex][1];
+  parsed.mimeType = Mimoza.getMimeType(parsed.url);
+  var RE = /^(audio|video)\/.*/gi;
+  var mimetype_matches = RE.exec(parsed.mimeType);
+  if (mimetype_matches === null) {
+    parsed.mediaType = null;
+  } else {
+    parsed.mediaType = mimetype_matches[1];
+  }
+
+  if (parsed.mediaType !== null) {
+    // For use as titles in alternative render functions, we store the description
+    // in parsed.title. For use as fallback text, we store it in parsed.fallback
+    // alongside the standard fallback text.
+    parsed.fallback = translate({
+      messageKey: parsed.mediaType + ' not supported',
+      messageParam: parsed.url,
+      language: env.language
+    });
+    if (description.trim().length) {
+      parsed.fallback += '\n' + translate({
+        messageKey: 'content description',
+        messageParam: description,
+        language: env.language
+      });
+      parsed.title = description;
+    } else {
+      parsed.title = translate({
+        messageKey: 'untitled ' + parsed.mediaType,
+        language: env.language
+      });
+    }
+  }
+  return parsed;
 }
 
+function isAllowedMimeType(parsed, options) {
+  return parsed.mediaType !== null &&
+    (!options.isAllowedMimeType || options.isAllowedMimeType([parsed.mimeType, parsed.mediaType]));
+}
 
-module.exports = function html5_embed_plugin(md, options) {
-  if(!options) {
-    options = { html5embed: {
-      useImageSyntax: true
-    } };
+function isAllowedSchema(parsed, options) {
+  if (!options.isAllowedHttp && parsed.url.match('^http://')) {
+    return false;
+  }
+  return true;
+}
+
+function isAllowedToEmbed(parsed, options) {
+  return isAllowedMimeType(parsed, options) && isAllowedSchema(parsed, options);
+}
+
+function renderMediaEmbed(parsed, mediaAttributes) {
+  var attributes = mediaAttributes[parsed.mediaType];
+
+  return ['<' + parsed.mediaType + ' ' + attributes + '>',
+    '<source type="' + parsed.mimeType + '" src="' + parsed.url + '"></source>',
+    parsed.fallback,
+    '</' + parsed.mediaType + '>'
+  ].join('\n');
+}
+
+function html5EmbedRenderer(tokens, idx, options, env, renderer, defaultRender) {
+  var parsed = parseToken(tokens, idx, env);
+
+  if (!isAllowedToEmbed(parsed, options.html5embed)) {
+    return defaultRender(tokens, idx, options, env, renderer);
   }
 
-  if(typeof options.html5embed.useImageSyntax === "undefined") {
-    options.html5embed.useImageSyntax = options.html5embed.use_image_syntax;
+  if (parsed.isLink) {
+    clearTokens(tokens, idx + 1);
   }
 
-  if(typeof options.html5embed.useLinkSyntax === "undefined") {
-    options.html5embed.useLinkSyntax = options.html5embed.use_link_syntax;
+  return renderMediaEmbed(parsed, options.html5embed.attributes);
+}
+
+function forEachLinkOpen(state, action) {
+  state.tokens.forEach(function(token, _idx, _tokens) {
+    if (token.type === "inline") {
+      token.children.forEach(function(token, idx, tokens) {
+        if (token.type === "link_open") {
+          action(tokens, idx);
+        }
+      });
+    }
+  });
+}
+
+function findDirective(state, startLine, _endLine, silent, regexp, build_token) {
+  var pos = state.bMarks[startLine] + state.tShift[startLine];
+  var max = state.eMarks[startLine];
+
+  // Detect directive markdown
+  var currentLine = state.src.substring(pos, max);
+  var match = regexp.exec(currentLine);
+  if (match === null || match.length < 1) {
+    return false;
   }
 
-  if(typeof options.html5embed.isAllowedMimeType === "undefined") {
-    options.html5embed.isAllowedMimeType = options.html5embed.is_allowed_mime_type;
+  if (silent) {
+    return true;
   }
 
-  if(options.html5embed.useImageSyntax) {
+  state.line = startLine + 1;
+
+  // Build content
+  var token = build_token();
+  token.map = [startLine, state.line];
+  token.markup = currentLine;
+
+  return true;
+}
+
+/**
+ * Very basic translation function. To translate or customize the UI messages,
+ * set options.messages. To also customize the translation function itself, set
+ * option.translateFn to a function that handles the same message object format.
+ *
+ * @param {Object} messageObj
+ *  the message object
+ * @param {String} messageObj.messageKey
+ *  an identifier used for looking up the message in i18n files
+ * @param {String} messageObj.messageParam
+ *  for substitution of %s for filename and description in the respective
+ *  messages
+ * @param {String} [messageObj.language='en']
+ *  a language code, ignored in the default implementation
+ * @this {Object}
+ *  the built-in default messages, or options.messages if set
+ */
+function translate(messageObj) {
+  // Default to English if we don't have this message, or don't support this
+  // language at all
+  var language = messageObj.language && this[messageObj.language] &&
+    this[messageObj.language][messageObj.messageKey] ?
+    messageObj.language :
+    'en';
+  var rv = this[language][messageObj.messageKey];
+
+  if (messageObj.messageParam) {
+    rv = rv.replace('%s', messageObj.messageParam);
+  }
+  return rv;
+}
+
+module.exports = function html5_embed_plugin(md, options = {}) {
+  var gstate;
+  var defaults = {
+    attributes: {
+      audio: 'controls preload="metadata"',
+      video: 'controls preload="metadata"'
+    },
+    useImageSyntax: true,
+    inline: true,
+    autoAppend: false,
+    embedPlaceDirectiveRegexp: /^\[\[html5media\]\]/im,
+    messages: messages
+  };
+  var options = md.utils.assign({}, defaults, options.html5embed);
+
+  if (!options.inline) {
+    md.block.ruler.before("paragraph", "html5embed", function(state, startLine, endLine, silent) {
+      return findDirective(state, startLine, endLine, silent, options.embedPlaceDirectiveRegexp, function() {
+        return state.push("html5media", "html5media", 0);
+      });
+    });
+
+    md.renderer.rules.html5media = function(tokens, index, _, env) {
+      var result = "";
+      forEachLinkOpen(gstate, function(tokens, idx) {
+        var parsed = parseToken(tokens, idx, env);
+
+        if (!isAllowedToEmbed(parsed, options)) {
+          return;
+        }
+
+        result += renderMediaEmbed(parsed, options.attributes);
+      });
+      if (result.length) {
+        result += "\n";
+      }
+      return result;
+    };
+
+    // Catch all the tokens for iteration later
+    md.core.ruler.push("grab_state", function(state) {
+      gstate = state;
+
+      if (options.autoAppend) {
+        var token = new state.Token("html5media", "", 0);
+        state.tokens.push(token);
+      }
+    });
+  }
+
+  if (typeof options.isAllowedMimeType === "undefined") {
+    options.isAllowedMimeType = options.is_allowed_mime_type;
+  }
+
+  if (options.inline && options.useImageSyntax) {
     var defaultRender = md.renderer.rules.image;
     md.renderer.rules.image = function(tokens, idx, opt, env, self) {
-      opt.html5embed = options.html5embed;
-      return html5_embed_renderer(tokens, idx, opt, env, self, defaultRender);
+      opt.html5embed = options;
+      return html5EmbedRenderer(tokens, idx, opt, env, self, defaultRender);
     }
   }
 
-  if(options.html5embed.useLinkSyntax) {
+  if (options.inline && options.useLinkSyntax) {
     var defaultRender = md.renderer.rules.link_open || function(tokens, idx, options, env, self) {
       return self.renderToken(tokens, idx, options);
     };
     md.renderer.rules.link_open = function(tokens, idx, opt, env, self) {
-      opt.html5embed = options.html5embed;
-      return html5_embed_renderer(tokens, idx, opt, env, self, defaultRender);
+      opt.html5embed = options;
+      return html5EmbedRenderer(tokens, idx, opt, env, self, defaultRender);
     };
   }
-};
 
+  // options.messages will be set to built-in messages at the beginning of this
+  // file if not configured
+  translate = typeof options.translateFn == 'function' ?
+    options.translateFn.bind(options.messages) :
+    translate.bind(options.messages);
+
+  if (typeof options.renderFn == 'function') {
+    renderMediaEmbed = options.renderFn;
+  }
+};
 
 },{"mimoza":2}],2:[function(require,module,exports){
 'use strict';
@@ -512,6 +677,9 @@ module.exports={
     "source": "iana",
     "extensions": ["cdmiq"]
   },
+  "application/cdni": {
+    "source": "iana"
+  },
   "application/cea": {
     "source": "iana"
   },
@@ -552,6 +720,10 @@ module.exports={
   "application/cstadata+xml": {
     "source": "iana"
   },
+  "application/csvm+json": {
+    "source": "iana",
+    "compressible": true
+  },
   "application/cu-seeme": {
     "source": "apache",
     "extensions": ["cu"]
@@ -564,7 +736,7 @@ module.exports={
   },
   "application/dash+xml": {
     "source": "iana",
-    "extensions": ["mdp"]
+    "extensions": ["mpd"]
   },
   "application/dashdelta": {
     "source": "iana"
@@ -630,6 +802,21 @@ module.exports={
   "application/edifact": {
     "source": "iana",
     "compressible": false
+  },
+  "application/emergencycalldata.comment+xml": {
+    "source": "iana"
+  },
+  "application/emergencycalldata.deviceinfo+xml": {
+    "source": "iana"
+  },
+  "application/emergencycalldata.providerinfo+xml": {
+    "source": "iana"
+  },
+  "application/emergencycalldata.serviceinfo+xml": {
+    "source": "iana"
+  },
+  "application/emergencycalldata.subscriberinfo+xml": {
+    "source": "iana"
   },
   "application/emma+xml": {
     "source": "iana",
@@ -1169,6 +1356,17 @@ module.exports={
     "compressible": true,
     "extensions": ["ai","eps","ps"]
   },
+  "application/ppsp-tracker+json": {
+    "source": "iana",
+    "compressible": true
+  },
+  "application/problem+json": {
+    "source": "iana",
+    "compressible": true
+  },
+  "application/problem+xml": {
+    "source": "iana"
+  },
   "application/provenance+xml": {
     "source": "iana"
   },
@@ -1235,6 +1433,9 @@ module.exports={
   "application/resource-lists-diff+xml": {
     "source": "iana",
     "extensions": ["rld"]
+  },
+  "application/rfc+xml": {
+    "source": "iana"
   },
   "application/riscos": {
     "source": "iana"
@@ -1511,6 +1712,9 @@ module.exports={
   "application/vnd.3gpp-prose-pc3ch+xml": {
     "source": "iana"
   },
+  "application/vnd.3gpp.access-transfer-events+xml": {
+    "source": "iana"
+  },
   "application/vnd.3gpp.bsf+xml": {
     "source": "iana"
   },
@@ -1530,6 +1734,9 @@ module.exports={
     "extensions": ["pvb"]
   },
   "application/vnd.3gpp.sms": {
+    "source": "iana"
+  },
+  "application/vnd.3gpp.srvcc-ext+xml": {
     "source": "iana"
   },
   "application/vnd.3gpp.srvcc-info+xml": {
@@ -2196,6 +2403,9 @@ module.exports={
   "application/vnd.ffsns": {
     "source": "iana"
   },
+  "application/vnd.filmit.zfc": {
+    "source": "iana"
+  },
   "application/vnd.fints": {
     "source": "iana"
   },
@@ -2328,6 +2538,18 @@ module.exports={
     "source": "iana",
     "extensions": ["gmx"]
   },
+  "application/vnd.google-apps.document": {
+    "compressible": false,
+    "extensions": ["gdoc"]
+  },
+  "application/vnd.google-apps.presentation": {
+    "compressible": false,
+    "extensions": ["gslides"]
+  },
+  "application/vnd.google-apps.spreadsheet": {
+    "compressible": false,
+    "extensions": ["gsheet"]
+  },
   "application/vnd.google-earth.kml+xml": {
     "source": "iana",
     "compressible": true,
@@ -2399,6 +2621,9 @@ module.exports={
     "extensions": ["hbci"]
   },
   "application/vnd.hcl-bireports": {
+    "source": "iana"
+  },
+  "application/vnd.hdt": {
     "source": "iana"
   },
   "application/vnd.heroku+json": {
@@ -2745,6 +2970,9 @@ module.exports={
     "source": "iana",
     "extensions": ["portpkg"]
   },
+  "application/vnd.mapbox-vector-tile": {
+    "source": "iana"
+  },
   "application/vnd.marlin.drm.actiontoken+xml": {
     "source": "iana"
   },
@@ -2986,8 +3214,14 @@ module.exports={
     "source": "iana",
     "extensions": ["potm"]
   },
+  "application/vnd.ms-printdevicecapabilities+xml": {
+    "source": "iana"
+  },
   "application/vnd.ms-printing.printticket+xml": {
     "source": "apache"
+  },
+  "application/vnd.ms-printschematicket+xml": {
+    "source": "iana"
   },
   "application/vnd.ms-project": {
     "source": "iana",
@@ -2996,7 +3230,16 @@ module.exports={
   "application/vnd.ms-tnef": {
     "source": "iana"
   },
+  "application/vnd.ms-windows.devicepairing": {
+    "source": "iana"
+  },
+  "application/vnd.ms-windows.nwprinting.oob": {
+    "source": "iana"
+  },
   "application/vnd.ms-windows.printerpairing": {
+    "source": "iana"
+  },
+  "application/vnd.ms-windows.wsd.oob": {
     "source": "iana"
   },
   "application/vnd.ms-wmdrm.lic-chlg-req": {
@@ -3697,6 +3940,13 @@ module.exports={
   "application/vnd.otps.ct-kip+xml": {
     "source": "iana"
   },
+  "application/vnd.oxli.countgraph": {
+    "source": "iana"
+  },
+  "application/vnd.pagerduty+json": {
+    "source": "iana",
+    "compressible": true
+  },
   "application/vnd.palm": {
     "source": "iana",
     "extensions": ["pdb","pqa","oprc"]
@@ -4148,6 +4398,9 @@ module.exports={
     "extensions": ["pcap","cap","dmp"]
   },
   "application/vnd.tmd.mediaflex.api+xml": {
+    "source": "iana"
+  },
+  "application/vnd.tml": {
     "source": "iana"
   },
   "application/vnd.tmobile-livetv": {
@@ -5032,7 +5285,7 @@ module.exports={
   "application/xml": {
     "source": "iana",
     "compressible": true,
-    "extensions": ["xml","xsl","xsd"]
+    "extensions": ["xml","xsl","xsd","rng"]
   },
   "application/xml-dtd": {
     "source": "iana",
@@ -5214,6 +5467,9 @@ module.exports={
   "audio/evrcwb1": {
     "source": "iana"
   },
+  "audio/evs": {
+    "source": "iana"
+  },
   "audio/fwdred": {
     "source": "iana"
   },
@@ -5303,7 +5559,7 @@ module.exports={
   "audio/mp4": {
     "source": "iana",
     "compressible": false,
-    "extensions": ["mp4a","m4a"]
+    "extensions": ["m4a","mp4a"]
   },
   "audio/mp4a-latm": {
     "source": "iana"
@@ -6054,6 +6310,9 @@ module.exports={
   "model/vnd.parasolid.transmit.text": {
     "source": "iana"
   },
+  "model/vnd.rosette.annotated-data-model": {
+    "source": "iana"
+  },
   "model/vnd.valve.source.compiled-map": {
     "source": "iana"
   },
@@ -6283,6 +6542,9 @@ module.exports={
     "source": "iana",
     "extensions": ["sgml","sgm"]
   },
+  "text/slim": {
+    "extensions": ["slim","slm"]
+  },
   "text/stylus": {
     "extensions": ["stylus","styl"]
   },
@@ -6485,6 +6747,10 @@ module.exports={
   "text/x-sfv": {
     "source": "apache",
     "extensions": ["sfv"]
+  },
+  "text/x-suse-ymp": {
+    "compressible": true,
+    "extensions": ["ymp"]
   },
   "text/x-uuencode": {
     "source": "apache",
