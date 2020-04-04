@@ -1,7 +1,7 @@
 'use strict';
 
 var path = require('path');
-var generate = require('markdown-it-testgen');
+var generate = require('@gerhobbelt/markdown-it-testgen');
 
 function clearBindings() {
   // Don't re-use cached function with old bindings
@@ -33,7 +33,7 @@ describe('markdown-it-html5-embed with image syntax', function() {
     }
   };
 
-  var md = require('markdown-it')().use(require('../lib'), option);
+  var md = require('@gerhobbelt/markdown-it')().use(require('../lib'), option);
   generate(path.join(__dirname, 'fixtures/image-syntax.txt'), md);
 });
 
@@ -44,7 +44,7 @@ describe('markdown-it-html5-embed with link syntax', function() {
     }
   };
 
-  var md = require('markdown-it')().use(require('../lib'), option);
+  var md = require('@gerhobbelt/markdown-it')().use(require('../lib'), option);
   generate(path.join(__dirname, 'fixtures/link-syntax.txt'), md);
 });
 
@@ -58,7 +58,7 @@ describe('markdown-it-html5-embed mime type filtering', function() {
     }
   };
 
-  var md = require('markdown-it')().use(require('../lib'), option);
+  var md = require('@gerhobbelt/markdown-it')().use(require('../lib'), option);
   generate(path.join(__dirname, 'fixtures/mime-filter.txt'), md);
 });
 
@@ -92,7 +92,7 @@ describe('markdown-it-html5-embed with handlebars', function() {
     }
   };
 
-  var md = require('markdown-it')().use(require('../lib'), option);
+  var md = require('@gerhobbelt/markdown-it')().use(require('../lib'), option);
 
   generate(path.join(__dirname, 'fixtures/with-handlebars.txt'), md);
 
@@ -106,7 +106,7 @@ describe("embedding with [[html5embed]] clause", function() {
     }
   };
 
-  var md = require('markdown-it')().use(require('../lib'), options);
+  var md = require('@gerhobbelt/markdown-it')().use(require('../lib'), options);
 
   generate(path.join(__dirname, 'fixtures/with-placeholder-syntax.txt'), md);
 });
@@ -119,7 +119,7 @@ describe("embedding with auto-append", function() {
     }
   };
 
-  var md = require('markdown-it')().use(require('../lib'), options);
+  var md = require('@gerhobbelt/markdown-it')().use(require('../lib'), options);
 
   generate(path.join(__dirname, 'fixtures/with-auto-append.txt'), md);
 });
@@ -138,7 +138,7 @@ describe('markdown-it-html5-embed with image syntax + custom messages', function
 
   clearBindings();
 
-  var md = require('markdown-it')().use(require('../lib'), option);
+  var md = require('@gerhobbelt/markdown-it')().use(require('../lib'), option);
   generate(path.join(__dirname, 'fixtures/image-syntax-custom-messages.txt'), md);
 });
 
@@ -167,7 +167,7 @@ describe('markdown-it-html5-embed with image syntax + custom translation fn', fu
 
   clearBindings();
 
-  var md = require('markdown-it')().use(require('../lib'), option);
+  var md = require('@gerhobbelt/markdown-it')().use(require('../lib'), option);
   var env = { language: 'de' };
 
   // Pass along env to generated tests
@@ -188,7 +188,7 @@ describe('markdown-it-html5-embed with link syntax http link when http disabled'
     }
   };
 
-  var md = require('markdown-it')().use(require('../lib'), options);
+  var md = require('@gerhobbelt/markdown-it')().use(require('../lib'), options);
   generate(path.join(__dirname, 'fixtures/link-syntax-http-disabled.txt'), md);
 });
 
@@ -200,6 +200,6 @@ describe('markdown-it-html5-embed with link syntax http link when http disabled'
     }
   };
 
-  var md = require('markdown-it')().use(require('../lib'), options);
+  var md = require('@gerhobbelt/markdown-it')().use(require('../lib'), options);
   generate(path.join(__dirname, 'fixtures/link-syntax-http-enabled.txt'), md);
 });
